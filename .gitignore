@@ -1,0 +1,42 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+
+# ── Environment variables (never commit secrets) ──────────────
+.env
+.env.*
+!.env.example
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.cache/
+frontend/coverage/
+*.local
+
+# ── Vite / build artifacts ────────────────────────────────────
+*.tsbuildinfo
+
+# ── Cypress ───────────────────────────────────────────────────
+frontend/cypress/screenshots/
+frontend/cypress/videos/
+
+# ── IDE & OS ──────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
