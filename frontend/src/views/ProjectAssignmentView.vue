@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/index.js'
 import { useEmployeeStore } from '@/stores/employee.js'
 
@@ -7,6 +7,7 @@ const store = useEmployeeStore()
 
 const projects = ref([])
 const notification = ref(null) // { type: 'success' | 'error', message: string }
+const errors = ref({})        // field-level error messages, keyed by field name
 const emailChecked = ref(false)
 
 const emptyForm = () => ({
@@ -31,50 +32,141 @@ onMounted(async () => {
   if (store.employee) fillForm(store.employee)
 })
 
+// ── Clear individual field errors as the user edits ──────────────────────────
+
+watch(() => form.value.full_name,           () => clearError('full_name'))
+watch(() => form.value.email,               () => clearError('email'))
+watch(() => form.value.experience_level,    () => clearError('experience_level'))
+watch(() => form.value.tech_stack,          () => clearError('tech_stack'))
+watch(() => form.value.preferred_duration,  () => clearError('preferred_duration'))
+watch(() => form.value.project_ids,         () => clearError('project_ids'), { deep: true })
+watch(() => form.value.availability_confirmed, () => clearError('availability_confirmed'))
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function fillForm(emp) {
-  form.value.full_name = emp.full_name
-  form.value.email = emp.email
-  form.value.experience_level = emp.experience_level
-  form.value.tech_stack = emp.tech_stack
-  form.value.preferred_duration = emp.preferred_duration
-  form.value.additional_skills = emp.additional_skills ?? ''
+  form.value.full_name              = emp.full_name
+  form.value.email                  = emp.email
+  form.value.experience_level       = emp.experience_level
+  form.value.tech_stack             = emp.tech_stack
+  form.value.preferred_duration     = emp.preferred_duration
+  form.value.additional_skills      = emp.additional_skills ?? ''
   form.value.availability_confirmed = emp.availability_confirmed
-  form.value.project_ids = emp.projects.map((p) => p.id)
+  form.value.project_ids            = emp.projects.map((p) => p.id)
 }
 
+function clearError(field) {
+  if (errors.value[field]) {
+    const next = { ...errors.value }
+    delete next[field]
+    errors.value = next
+  }
+}
+
+// ── Client-side validation ────────────────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function validate() {
+  const e = {}
+
+  if (!form.value.full_name.trim()) {
+    e.full_name = 'Full name is required.'
+  } else if (form.value.full_name.trim().length < 2) {
+    e.full_name = 'Full name must be at least 2 characters.'
+  }
+
+  if (!form.value.email.trim()) {
+    e.email = 'Email address is required.'
+  } else if (!EMAIL_RE.test(form.value.email.trim())) {
+    e.email = 'Please enter a valid email address (e.g. jane@company.com).'
+  }
+
+  if (!form.value.experience_level) {
+    e.experience_level = 'Please select your experience level.'
+  }
+
+  if (!form.value.tech_stack) {
+    e.tech_stack = 'Please select your primary technology stack.'
+  }
+
+  if (!form.value.preferred_duration) {
+    e.preferred_duration = 'Please select a preferred project duration.'
+  }
+
+  if (form.value.project_ids.length === 0) {
+    e.project_ids = 'Please select at least one project.'
+  }
+
+  if (!form.value.availability_confirmed) {
+    e.availability_confirmed = 'Please confirm your availability before saving.'
+  }
+
+  errors.value = e
+  return Object.keys(e).length === 0
+}
+
+// ── Email blur — early format feedback before first submit ────────────────────
+
 async function handleEmailBlur() {
-  if (emailChecked.value || !form.value.email || store.employee) return
+  const val = form.value.email.trim()
+
+  // Real-time format check on blur
+  if (val && !EMAIL_RE.test(val)) {
+    errors.value = { ...errors.value, email: 'Please enter a valid email address (e.g. jane@company.com).' }
+    return
+  }
+
+  if (emailChecked.value || !val || store.employee) return
   emailChecked.value = true
 
-  const found = await store.lookupByEmail(form.value.email)
+  const found = await store.lookupByEmail(val)
   if (found) {
     fillForm(found)
+    errors.value = {}
     notify('success', 'Existing profile loaded — update your information and click Save Profile.')
   }
 }
 
+// ── Submit ────────────────────────────────────────────────────────────────────
+
 async function handleSubmit() {
-  if (!form.value.availability_confirmed) {
-    notify('error', 'Please confirm your availability before saving.')
+  notification.value = null
+
+  if (!validate()) {
+    notify('error', 'Please fix the errors below before saving.')
     return
   }
+
   try {
     await store.saveEmployee({ ...form.value })
+    errors.value = {}
     notify(
       'success',
       isUpdate.value ? 'Profile updated successfully!' : 'Profile registered successfully!',
     )
   } catch (e) {
-    notify('error', store.error ?? e.message)
+    // Server returned field-level validation errors (422)
+    if (e.fieldErrors && Object.keys(e.fieldErrors).length > 0) {
+      errors.value = { ...errors.value, ...e.fieldErrors }
+      notify('error', 'Please fix the errors below before saving.')
+    } else {
+      notify('error', store.error ?? e.message)
+    }
   }
 }
 
+// ── Clear ─────────────────────────────────────────────────────────────────────
+
 function handleClear() {
   form.value = emptyForm()
-  store.clear()
+  errors.value = {}
   notification.value = null
   emailChecked.value = false
+  store.clear()
 }
+
+// ── Notification ──────────────────────────────────────────────────────────────
 
 function notify(type, message) {
   notification.value = { type, message }
@@ -88,6 +180,7 @@ function notify(type, message) {
       <h1 class="card-title">Project Assignment Form</h1>
       <p class="card-subtitle">Complete your profile to get assigned to internal projects.</p>
 
+      <!-- Top-level notification banner -->
       <Transition name="fade">
         <div v-if="notification" :class="['notification', notification.type]" role="alert">
           {{ notification.message }}
@@ -96,6 +189,7 @@ function notify(type, message) {
       </Transition>
 
       <form @submit.prevent="handleSubmit" novalidate>
+
         <!-- Full Name -->
         <div class="field">
           <label for="full_name">Full Name</label>
@@ -104,8 +198,10 @@ function notify(type, message) {
             v-model="form.full_name"
             type="text"
             placeholder="Jane Doe"
-            required
+            :class="{ 'input-error': errors.full_name }"
+            autocomplete="name"
           />
+          <p v-if="errors.full_name" class="error-msg" role="alert">{{ errors.full_name }}</p>
         </div>
 
         <!-- Email -->
@@ -121,27 +217,37 @@ function notify(type, message) {
             type="email"
             placeholder="jane@company.com"
             :readonly="emailLocked"
-            :class="{ 'input-locked': emailLocked }"
+            :class="{ 'input-locked': emailLocked, 'input-error': errors.email }"
+            autocomplete="email"
             @blur="handleEmailBlur"
-            required
           />
+          <p v-if="errors.email" class="error-msg" role="alert">{{ errors.email }}</p>
         </div>
 
         <!-- Experience Level -->
         <div class="field">
           <label for="experience_level">Experience Level</label>
-          <select id="experience_level" v-model="form.experience_level" required>
+          <select
+            id="experience_level"
+            v-model="form.experience_level"
+            :class="{ 'input-error': errors.experience_level }"
+          >
             <option value="">Select your level</option>
             <option value="junior">Junior (0–2 years)</option>
             <option value="mid">Mid-level (2–5 years)</option>
             <option value="senior">Senior (5+ years)</option>
           </select>
+          <p v-if="errors.experience_level" class="error-msg" role="alert">{{ errors.experience_level }}</p>
         </div>
 
         <!-- Tech Stack -->
         <div class="field">
           <label for="tech_stack">Primary Technology Stack</label>
-          <select id="tech_stack" v-model="form.tech_stack" required>
+          <select
+            id="tech_stack"
+            v-model="form.tech_stack"
+            :class="{ 'input-error': errors.tech_stack }"
+          >
             <option value="">Choose one</option>
             <option value="backend">Backend Development</option>
             <option value="frontend">Frontend Development</option>
@@ -150,6 +256,7 @@ function notify(type, message) {
             <option value="devops">DevOps</option>
             <option value="mobile">Mobile Development</option>
           </select>
+          <p v-if="errors.tech_stack" class="error-msg" role="alert">{{ errors.tech_stack }}</p>
         </div>
 
         <!-- Available Projects — populated dynamically from the API -->
@@ -158,18 +265,24 @@ function notify(type, message) {
             Available Projects
             <span class="hint">Hold Ctrl / ⌘ to select multiple</span>
           </label>
-          <select id="projects" v-model="form.project_ids" multiple class="multi-select">
+          <select
+            id="projects"
+            v-model="form.project_ids"
+            multiple
+            :class="['multi-select', { 'input-error': errors.project_ids }]"
+          >
             <option v-if="projects.length === 0" disabled value="">Loading projects…</option>
             <option v-for="p in projects" :key="p.id" :value="p.id">
               {{ p.name }}
             </option>
           </select>
+          <p v-if="errors.project_ids" class="error-msg" role="alert">{{ errors.project_ids }}</p>
         </div>
 
         <!-- Preferred Duration -->
         <div class="field">
-          <label>Preferred Project Duration</label>
-          <div class="radio-group">
+          <span class="field-label">Preferred Project Duration</span>
+          <div :class="['radio-group', { 'group-error': errors.preferred_duration }]">
             <label class="radio-label">
               <input type="radio" v-model="form.preferred_duration" value="short" />
               Short-term (1–3 months)
@@ -183,6 +296,7 @@ function notify(type, message) {
               Long-term (6+ months)
             </label>
           </div>
+          <p v-if="errors.preferred_duration" class="error-msg" role="alert">{{ errors.preferred_duration }}</p>
         </div>
 
         <!-- Additional Skills -->
@@ -201,10 +315,13 @@ function notify(type, message) {
 
         <!-- Availability Confirmation -->
         <div class="field">
-          <label class="checkbox-label">
+          <label :class="['checkbox-label', { 'label-error': errors.availability_confirmed }]">
             <input type="checkbox" v-model="form.availability_confirmed" />
             I confirm my availability for the selected projects
           </label>
+          <p v-if="errors.availability_confirmed" class="error-msg" role="alert">
+            {{ errors.availability_confirmed }}
+          </p>
         </div>
 
         <!-- Actions -->
@@ -214,6 +331,7 @@ function notify(type, message) {
           </button>
           <button type="button" class="btn-secondary" @click="handleClear">Clear Form</button>
         </div>
+
       </form>
     </div>
   </div>
@@ -250,7 +368,7 @@ function notify(type, message) {
   margin-bottom: 1.8rem;
 }
 
-/* ── Notification ─────────────────────────────────────────── */
+/* ── Top-level notification banner ───────────────────────── */
 .notification {
   display: flex;
   align-items: center;
@@ -283,21 +401,20 @@ function notify(type, message) {
   padding: 0;
   color: inherit;
   opacity: 0.6;
+  flex-shrink: 0;
 }
+.notif-close:hover { opacity: 1; }
 
-.notif-close:hover {
-  opacity: 1;
-}
-
-/* ── Form Fields ──────────────────────────────────────────── */
+/* ── Form fields ──────────────────────────────────────────── */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  margin-bottom: 1.2rem;
+  gap: 0.35rem;
+  margin-bottom: 1.15rem;
 }
 
-.field label {
+.field label,
+.field-label {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--color-heading);
@@ -325,6 +442,34 @@ function notify(type, message) {
   border-color: hsla(160, 100%, 37%, 0.8);
 }
 
+/* ── Validation error states ──────────────────────────────── */
+.input-error {
+  border-color: #dc2626 !important;
+}
+
+.input-error:focus {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.group-error {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+}
+
+.label-error {
+  color: #dc2626 !important;
+}
+
+/* Inline error message under a field */
+.error-msg {
+  font-size: 0.8rem;
+  color: #dc2626;
+  margin: 0;
+}
+
+/* ── Locked email ─────────────────────────────────────────── */
 .input-locked {
   opacity: 0.65;
   cursor: not-allowed;
@@ -348,7 +493,7 @@ function notify(type, message) {
   color: var(--color-heading);
 }
 
-/* ── Radio Group ──────────────────────────────────────────── */
+/* ── Radio group ──────────────────────────────────────────── */
 .radio-group {
   display: flex;
   flex-direction: column;
@@ -384,15 +529,8 @@ function notify(type, message) {
   border-radius: 9999px;
 }
 
-.badge.loading {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.badge.locked {
-  background: #d1fae5;
-  color: #065f46;
-}
+.badge.loading { background: #fef3c7; color: #92400e; }
+.badge.locked  { background: #d1fae5; color: #065f46; }
 
 .hint {
   font-size: 0.75rem;
@@ -409,7 +547,7 @@ function notify(type, message) {
   font-weight: normal;
 }
 
-/* ── Actions ──────────────────────────────────────────────── */
+/* ── Buttons ──────────────────────────────────────────────── */
 .actions {
   display: flex;
   gap: 0.75rem;
@@ -423,43 +561,19 @@ button {
   font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
-  transition:
-    background 0.2s,
-    opacity 0.2s;
+  transition: background 0.2s, opacity 0.2s;
 }
 
-.btn-primary {
-  background: hsla(160, 100%, 37%, 1);
-  color: #fff;
-}
+.btn-primary { background: hsla(160, 100%, 37%, 1); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: hsla(160, 100%, 30%, 1); }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.btn-primary:hover:not(:disabled) {
-  background: hsla(160, 100%, 30%, 1);
-}
-
-.btn-primary:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border-hover);
-}
-
-.btn-secondary:hover {
-  background: var(--color-background-mute);
-}
+.btn-secondary { background: transparent; color: var(--color-text); border-color: var(--color-border-hover); }
+.btn-secondary:hover { background: var(--color-background-mute); }
 
 /* ── Fade transition for notification ────────────────────── */
 .fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s;
-}
-
+.fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+.fade-leave-to     { opacity: 0; }
 </style>
