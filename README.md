@@ -1,6 +1,4 @@
-# TeliaWeb — Project Assignment App
-
-Internal web app for employees to register a profile and select projects they're interested in.
+# Telia proovitöö
 
 **Stack:** FastAPI · Supabase (PostgreSQL) · Vue 3 + Vite
 
