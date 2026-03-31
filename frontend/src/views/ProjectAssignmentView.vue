@@ -135,12 +135,14 @@ async function handleSubmit() {
     return
   }
 
+  const wasUpdate = isUpdate.value
+
   try {
     await store.saveEmployee({ ...form.value })
     errors.value = {}
     notify(
       'success',
-      isUpdate.value ? 'Profile updated successfully!' : 'Profile registered successfully!',
+      wasUpdate ? 'Profile updated successfully!' : 'Profile registered successfully!',
     )
   } catch (e) {
     // Server returned field-level validation errors (422)
