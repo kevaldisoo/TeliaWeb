@@ -1,5 +1,3 @@
-// Base URL is empty so requests go through the Vite dev proxy (/api → http://localhost:8000).
-// In production, set VITE_API_BASE in your .env to the deployed backend URL.
 const BASE = import.meta.env.VITE_API_BASE ?? ''
 
 /**

@@ -106,7 +106,6 @@ function validate() {
   return Object.keys(e).length === 0
 }
 
-// ── Email blur — early format feedback before first submit ────────────────────
 
 async function handleEmailBlur() {
   const val = form.value.email.trim()
@@ -127,8 +126,6 @@ async function handleEmailBlur() {
     notify('success', 'Existing profile loaded — update your information and click Save Profile.')
   }
 }
-
-// ── Submit ────────────────────────────────────────────────────────────────────
 
 async function handleSubmit() {
   notification.value = null
@@ -156,8 +153,6 @@ async function handleSubmit() {
   }
 }
 
-// ── Clear ─────────────────────────────────────────────────────────────────────
-
 function handleClear() {
   form.value = emptyForm()
   errors.value = {}
@@ -165,8 +160,6 @@ function handleClear() {
   emailChecked.value = false
   store.clear()
 }
-
-// ── Notification ──────────────────────────────────────────────────────────────
 
 function notify(type, message) {
   notification.value = { type, message }
@@ -368,7 +361,6 @@ function notify(type, message) {
   margin-bottom: 1.8rem;
 }
 
-/* ── Top-level notification banner ───────────────────────── */
 .notification {
   display: flex;
   align-items: center;
@@ -405,7 +397,6 @@ function notify(type, message) {
 }
 .notif-close:hover { opacity: 1; }
 
-/* ── Form fields ──────────────────────────────────────────── */
 .field {
   display: flex;
   flex-direction: column;
@@ -442,7 +433,6 @@ function notify(type, message) {
   border-color: hsla(160, 100%, 37%, 0.8);
 }
 
-/* ── Validation error states ──────────────────────────────── */
 .input-error {
   border-color: #dc2626 !important;
 }
@@ -469,14 +459,12 @@ function notify(type, message) {
   margin: 0;
 }
 
-/* ── Locked email ─────────────────────────────────────────── */
 .input-locked {
   opacity: 0.65;
   cursor: not-allowed;
   background: var(--color-background-mute) !important;
 }
 
-/* ── Multi-select ─────────────────────────────────────────── */
 .multi-select {
   height: 220px;
   padding: 0.25rem;
@@ -493,7 +481,6 @@ function notify(type, message) {
   color: var(--color-heading);
 }
 
-/* ── Radio group ──────────────────────────────────────────── */
 .radio-group {
   display: flex;
   flex-direction: column;
@@ -510,7 +497,6 @@ function notify(type, message) {
   color: var(--color-text) !important;
 }
 
-/* ── Checkbox ─────────────────────────────────────────────── */
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -521,7 +507,6 @@ function notify(type, message) {
   color: var(--color-text) !important;
 }
 
-/* ── Badges ───────────────────────────────────────────────── */
 .badge {
   font-size: 0.7rem;
   font-weight: 500;
@@ -547,7 +532,6 @@ function notify(type, message) {
   font-weight: normal;
 }
 
-/* ── Buttons ──────────────────────────────────────────────── */
 .actions {
   display: flex;
   gap: 0.75rem;
